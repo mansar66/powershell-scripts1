@@ -1,0 +1,45 @@
+# List of server names (you can put this in a .txt file or array)
+$servers = @("Server1", "Server2", "Server3")
+
+# Output file path
+$outputFile = "C:\ServerHealthReport.csv"
+
+# Empty array to store results
+$results = @()
+
+foreach ($server in $servers) {
+    try {
+        $session = New-PSSession -ComputerName $server -ErrorAction Stop
+
+        $cpuLoad = Invoke-Command -Session $session -ScriptBlock {
+            Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average
+        }
+
+        $memInfo = Invoke-Command -Session $session -ScriptBlock {
+            $os = Get-CimInstance Win32_OperatingSystem
+            [math]::Round((($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize) * 100, 2)
+        }
+
+        Remove-PSSession $session
+
+        $results += [PSCustomObject]@{
+            ServerName      = $server
+            CPU_Usage_Percent = $cpuLoad
+            Memory_Usage_Percent = $memInfo
+            TimeStamp       = Get-Date
+        }
+
+    } catch {
+        $results += [PSCustomObject]@{
+            ServerName      = $server
+            CPU_Usage_Percent = "Error"
+            Memory_Usage_Percent = "Error"
+            TimeStamp       = Get-Date
+        }
+    }
+}
+
+# Export to CSV
+$results | Export-Csv -Path $outputFile -NoTypeInformation
+
+Write-Output "Report saved to $outputFile"
